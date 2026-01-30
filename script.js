@@ -1,6 +1,5 @@
 const CALENDAR_URL =
   "https://api.veracross.com/cate/subscribe/76B2E2E6-2C26-4656-A311-27910AAAAB2D.ics?uid=18A335ED-EFDF-4B52-95CD-EA80F989F34B";
-const CORS_PROXY_URL = "https://api.allorigins.win/raw?url=";
 
 const statusValue = document.getElementById("status-value");
 const statusDetail = document.getElementById("status-detail");
@@ -217,26 +216,15 @@ const updateStatus = (events) => {
   statusUpdated.textContent = `Updated: ${formatDateTime(now)}`;
 };
 
-const fetchCalendarText = async () => {
-  const response = await fetch(CALENDAR_URL);
-  if (response.ok) {
-    return response.text();
-  }
-
-  const proxiedResponse = await fetch(
-    `${CORS_PROXY_URL}${encodeURIComponent(CALENDAR_URL)}`
-  );
-  if (!proxiedResponse.ok) {
-    throw new Error(`Calendar fetch failed: ${proxiedResponse.status}`);
-  }
-  return proxiedResponse.text();
-};
-
 const loadCalendar = async () => {
   statusDetail.textContent = "Loading calendar data…";
 
   try {
-    const icsText = await fetchCalendarText();
+    const response = await fetch(CALENDAR_URL);
+    if (!response.ok) {
+      throw new Error(`Calendar fetch failed: ${response.status}`);
+    }
+    const icsText = await response.text();
     const rawEvents = parseIcs(icsText);
     const events = normalizeEvents(rawEvents).filter((event) =>
       INTERDORM_REGEX.test(event.summary)
