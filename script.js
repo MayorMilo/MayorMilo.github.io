@@ -1,269 +1,318 @@
-const CALENDAR_URL =
-  "https://api.veracross.com/cate/subscribe/76B2E2E6-2C26-4656-A311-27910AAAAB2D.ics?uid=18A335ED-EFDF-4B52-95CD-EA80F989F34B";
+const groupInput = document.getElementById("group-input");
+const saveGroupsButton = document.getElementById("save-groups");
+const saveStatus = document.getElementById("save-status");
+const groupList = document.getElementById("group-list");
+const groupLabel = document.getElementById("group-label");
+const weekRange = document.getElementById("week-range");
+const weekDetail = document.getElementById("week-detail");
+const groupCount = document.getElementById("group-count");
+const rotationNote = document.getElementById("rotation-note");
+const calendar = document.getElementById("calendar");
+const prevWeekButton = document.getElementById("prev-week");
+const nextWeekButton = document.getElementById("next-week");
+const todayWeekButton = document.getElementById("today-week");
+const dropStatus = document.getElementById("drop-status");
 
-const statusValue = document.getElementById("status-value");
-const statusDetail = document.getElementById("status-detail");
-const statusNext = document.getElementById("status-next");
-const statusUpdated = document.getElementById("status-updated");
-const eventList = document.getElementById("event-list");
-const calendarUrl = document.getElementById("calendar-url");
-
-calendarUrl.textContent = CALENDAR_URL;
-
-const INTERDORM_REGEX = /interdorm/i;
-
-const unfoldLines = (text) =>
-  text
-    .replace(/\r\n/g, "\n")
-    .replace(/\n[ \t]/g, "");
-
-const parseDateValue = (value, tzid) => {
-  if (!value) {
-    return null;
-  }
-
-  if (/^\d{8}$/.test(value)) {
-    const year = Number(value.slice(0, 4));
-    const month = Number(value.slice(4, 6)) - 1;
-    const day = Number(value.slice(6, 8));
-    return new Date(year, month, day);
-  }
-
-  const trimmed = value.trim();
-  const isUtc = trimmed.endsWith("Z");
-  const datePart = trimmed.replace("Z", "");
-  const year = Number(datePart.slice(0, 4));
-  const month = Number(datePart.slice(4, 6)) - 1;
-  const day = Number(datePart.slice(6, 8));
-  const hour = Number(datePart.slice(9, 11));
-  const minute = Number(datePart.slice(11, 13));
-  const second = Number(datePart.slice(13, 15) || 0);
-
-  if (isUtc) {
-    return new Date(Date.UTC(year, month, day, hour, minute, second));
-  }
-
-  if (tzid && tzid !== "local") {
-    const localeTime = new Date(year, month, day, hour, minute, second);
-    return localeTime;
-  }
-
-  return new Date(year, month, day, hour, minute, second);
+const STORAGE_KEYS = {
+  groups: "dormDutyGroups",
+  assignments: "dormDutyAssignments",
 };
 
-const parseIcs = (icsText) => {
-  const events = [];
-  const lines = unfoldLines(icsText).split("\n");
-  let currentEvent = null;
+const DEFAULT_GROUPS = `Group 1: Alex, Andrew, Ashwin, Lawrence, Dimash
+Group 2: Bella, Brooke, Carter, Elena, Jae
+Group 3: Malik, Priya, Quinn, Sofia, Talia`;
 
-  for (const line of lines) {
-    if (line.startsWith("BEGIN:VEVENT")) {
-      currentEvent = {};
-      continue;
-    }
+const DUTY_TIME = "7:30–10:00 PM";
 
-    if (line.startsWith("END:VEVENT")) {
-      if (currentEvent) {
-        events.push(currentEvent);
-      }
-      currentEvent = null;
-      continue;
-    }
-
-    if (!currentEvent) {
-      continue;
-    }
-
-    const [propertySection, value] = line.split(":", 2);
-    if (!value) {
-      continue;
-    }
-
-    const [propertyName, ...params] = propertySection.split(";");
-    const upperName = propertyName.toUpperCase();
-    const paramMap = params.reduce((acc, param) => {
-      const [key, paramValue] = param.split("=");
-      if (key && paramValue) {
-        acc[key.toLowerCase()] = paramValue;
-      }
-      return acc;
-    }, {});
-
-    currentEvent[upperName] = {
-      value: value.trim(),
-      params: paramMap,
-    };
-  }
-
-  return events;
-};
-
-const formatDateTime = (date) =>
+const formatDate = (date) =>
   new Intl.DateTimeFormat(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
   }).format(date);
 
-const formatDuration = (ms) => {
-  if (ms <= 0) {
-    return "0 minutes";
-  }
+const formatRange = (start, end) =>
+  `${formatDate(start)} – ${formatDate(end)}`;
 
-  const totalMinutes = Math.floor(ms / 60000);
-  const days = Math.floor(totalMinutes / 1440);
-  const hours = Math.floor((totalMinutes % 1440) / 60);
-  const minutes = totalMinutes % 60;
-  const parts = [];
-
-  if (days) {
-    parts.push(`${days} day${days === 1 ? "" : "s"}`);
-  }
-  if (hours) {
-    parts.push(`${hours} hour${hours === 1 ? "" : "s"}`);
-  }
-  if (!days && !hours) {
-    parts.push(`${minutes} minute${minutes === 1 ? "" : "s"}`);
-  } else if (minutes) {
-    parts.push(`${minutes} minute${minutes === 1 ? "" : "s"}`);
-  }
-
-  return parts.join(", ");
+const startOfWeek = (date) => {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  const day = copy.getDay();
+  copy.setDate(copy.getDate() - day);
+  return copy;
 };
 
-const normalizeEvents = (rawEvents) =>
-  rawEvents
-    .map((event) => {
-      const summary = event.SUMMARY?.value || "";
-      const startRaw = event.DTSTART;
-      const endRaw = event.DTEND;
+const addDays = (date, amount) => {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + amount);
+  return copy;
+};
 
-      if (!startRaw || !endRaw) {
-        return null;
-      }
+const getRotationBase = () => {
+  const yearStart = new Date(new Date().getFullYear(), 0, 1);
+  return startOfWeek(yearStart);
+};
 
-      const start = parseDateValue(startRaw.value, startRaw.params?.tzid);
-      const end = parseDateValue(endRaw.value, endRaw.params?.tzid);
+const parseGroups = (text) => {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
-      return {
-        summary,
-        start,
-        end,
-      };
-    })
-    .filter((event) => event && event.start && event.end)
-    .sort((a, b) => a.start - b.start);
+  const groups = [];
 
-const renderEvents = (events) => {
-  eventList.innerHTML = "";
-  if (!events.length) {
-    const empty = document.createElement("li");
-    empty.className = "event-placeholder";
-    empty.textContent = "No interdorm events found in the calendar.";
-    eventList.appendChild(empty);
+  for (const line of lines) {
+    const match = line.match(/^Group\s*(\d+)\s*:\s*(.+)$/i);
+    if (!match) {
+      continue;
+    }
+    const groupNumber = Number(match[1]);
+    const names = match[2]
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean);
+
+    if (names.length) {
+      groups.push({
+        number: groupNumber,
+        names,
+      });
+    }
+  }
+
+  return groups.slice(0, 5);
+};
+
+const loadGroups = () => {
+  const saved = localStorage.getItem(STORAGE_KEYS.groups);
+  const content = saved || DEFAULT_GROUPS;
+  groupInput.value = content;
+  return parseGroups(content);
+};
+
+const saveGroups = () => {
+  const content = groupInput.value.trim() || DEFAULT_GROUPS;
+  localStorage.setItem(STORAGE_KEYS.groups, content);
+  saveStatus.textContent = "Groups saved.";
+  window.setTimeout(() => {
+    saveStatus.textContent = "";
+  }, 2000);
+  return parseGroups(content);
+};
+
+const loadAssignments = () => {
+  const raw = localStorage.getItem(STORAGE_KEYS.assignments);
+  if (!raw) {
+    return {};
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    return {};
+  }
+};
+
+const saveAssignments = (assignments) => {
+  localStorage.setItem(STORAGE_KEYS.assignments, JSON.stringify(assignments));
+};
+
+const assignments = loadAssignments();
+let groups = loadGroups();
+let currentWeekStart = startOfWeek(new Date());
+
+const getWeekKey = (weekStart) => weekStart.toISOString().split("T")[0];
+
+const getWeekAssignments = (weekStart) => {
+  const key = getWeekKey(weekStart);
+  return assignments[key] || {};
+};
+
+const setWeekAssignment = (weekStart, dayIndex, name) => {
+  const key = getWeekKey(weekStart);
+  const weekAssignments = assignments[key] || {};
+  weekAssignments[dayIndex] = name;
+  assignments[key] = weekAssignments;
+  saveAssignments(assignments);
+};
+
+const removeWeekAssignment = (weekStart, dayIndex) => {
+  const key = getWeekKey(weekStart);
+  const weekAssignments = assignments[key] || {};
+  delete weekAssignments[dayIndex];
+  assignments[key] = weekAssignments;
+  saveAssignments(assignments);
+};
+
+const getGroupForWeek = (weekStart) => {
+  if (!groups.length) {
+    return null;
+  }
+  const base = getRotationBase();
+  const diffMs = weekStart - base;
+  const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+  const index = ((diffWeeks % groups.length) + groups.length) % groups.length;
+  return groups[index];
+};
+
+const updateGroupPanel = () => {
+  groupList.innerHTML = "";
+  const currentGroup = getGroupForWeek(currentWeekStart);
+
+  if (!currentGroup) {
+    groupLabel.textContent = "Group --";
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "Add group names to begin scheduling.";
+    groupList.appendChild(empty);
     return;
   }
 
-  events.slice(0, 6).forEach((event) => {
-    const item = document.createElement("li");
-    item.className = "event-item";
+  groupLabel.textContent = `Group ${currentGroup.number}`;
 
-    const title = document.createElement("div");
-    title.className = "event-title";
-    title.textContent = event.summary;
-
-    const time = document.createElement("div");
-    time.className = "event-time";
-    time.textContent = `${formatDateTime(event.start)} – ${formatDateTime(
-      event.end
-    )}`;
-
-    item.appendChild(title);
-    item.appendChild(time);
-    eventList.appendChild(item);
+  currentGroup.names.forEach((name) => {
+    const pill = document.createElement("div");
+    pill.className = "name-pill";
+    pill.textContent = name;
+    pill.setAttribute("draggable", "true");
+    pill.dataset.name = name;
+    pill.addEventListener("dragstart", (event) => {
+      event.dataTransfer.setData("text/plain", name);
+    });
+    groupList.appendChild(pill);
   });
 };
 
-const updateStatus = (events) => {
-  const now = new Date();
-  const current = events.find((event) => now >= event.start && now <= event.end);
-  const upcoming = events.find((event) => event.start > now);
+const updateWeekHeader = () => {
+  const weekEnd = addDays(currentWeekStart, 6);
+  weekRange.textContent = formatRange(currentWeekStart, weekEnd);
+  weekDetail.textContent = `Duty runs ${DUTY_TIME} Sunday–Friday.`;
+  groupCount.textContent = `Groups loaded: ${groups.length}`;
+  const rotationBase = getRotationBase();
+  rotationNote.textContent = `Rotation base: ${formatDate(rotationBase)}`;
+};
 
-  if (current) {
-    const remaining = current.end - now;
-    statusValue.textContent = "Interdorm is ON";
-    statusValue.classList.add("on");
-    statusValue.classList.remove("off");
-    statusDetail.textContent = `Ends in ${formatDuration(remaining)}.`;
-    statusNext.textContent = `Ends: ${formatDateTime(current.end)}`;
-  } else {
-    statusValue.textContent = "Interdorm is OFF";
-    statusValue.classList.add("off");
-    statusValue.classList.remove("on");
+const createAssignment = (name, onRemove) => {
+  const wrapper = document.createElement("div");
+  wrapper.className = "assignment";
+  const label = document.createElement("span");
+  label.textContent = name;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.setAttribute("aria-label", "Remove assignment");
+  button.textContent = "×";
+  button.addEventListener("click", onRemove);
+  wrapper.appendChild(label);
+  wrapper.appendChild(button);
+  return wrapper;
+};
 
-    if (upcoming) {
-      const until = upcoming.start - now;
-      statusDetail.textContent = `Next session starts in ${formatDuration(until)}.`;
-      statusNext.textContent = `Starts: ${formatDateTime(upcoming.start)}`;
+const renderCalendar = () => {
+  calendar.innerHTML = "";
+  const weekAssignments = getWeekAssignments(currentWeekStart);
+
+  for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+    const date = addDays(currentWeekStart, dayIndex);
+    const isSaturday = dayIndex === 6;
+
+    const day = document.createElement("div");
+    day.className = "day";
+
+    const header = document.createElement("div");
+    header.className = "day-header";
+
+    const title = document.createElement("div");
+    title.className = "day-title";
+    title.textContent = new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+    }).format(date);
+
+    const dateLabel = document.createElement("div");
+    dateLabel.className = "day-date";
+    dateLabel.textContent = formatDate(date);
+
+    const time = document.createElement("div");
+    time.className = "day-time";
+    time.textContent = isSaturday ? "No duty (weekend)" : DUTY_TIME;
+
+    header.appendChild(title);
+    header.appendChild(dateLabel);
+    header.appendChild(time);
+
+    const dropzone = document.createElement("div");
+    dropzone.className = "dropzone";
+
+    const assignedName = weekAssignments[dayIndex];
+    if (assignedName) {
+      dropzone.innerHTML = "";
+      const assignment = createAssignment(assignedName, () => {
+        removeWeekAssignment(currentWeekStart, dayIndex);
+        renderCalendar();
+        dropStatus.textContent = `Removed ${assignedName} from ${title.textContent}.`;
+      });
+      dropzone.appendChild(assignment);
     } else {
-      statusDetail.textContent = "No upcoming interdorm sessions are scheduled.";
-      statusNext.textContent = "Next session: --";
+      dropzone.textContent = isSaturday
+        ? "No duty sign-up"
+        : "Drop a senior here";
     }
-  }
 
-  statusUpdated.textContent = `Updated: ${formatDateTime(now)}`;
-};
+    if (!isSaturday) {
+      dropzone.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        day.classList.add("drag-over");
+      });
 
-const loadCalendar = async () => {
-  statusDetail.textContent = "Loading calendar data…";
+      dropzone.addEventListener("dragleave", () => {
+        day.classList.remove("drag-over");
+      });
 
-  try {
-    const response = await fetch(CALENDAR_URL);
-    if (!response.ok) {
-      throw new Error(`Calendar fetch failed: ${response.status}`);
+      dropzone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        day.classList.remove("drag-over");
+        const name = event.dataTransfer.getData("text/plain");
+        if (!name) {
+          return;
+        }
+        if (weekAssignments[dayIndex]) {
+          dropStatus.textContent = `Only one senior per night. ${title.textContent} is already taken.`;
+          return;
+        }
+        setWeekAssignment(currentWeekStart, dayIndex, name);
+        renderCalendar();
+        dropStatus.textContent = `${name} assigned to ${title.textContent}.`;
+      });
     }
-    const icsText = await response.text();
-    const rawEvents = parseIcs(icsText);
-    const events = normalizeEvents(rawEvents).filter((event) =>
-      INTERDORM_REGEX.test(event.summary)
-    );
 
-    renderEvents(events);
-    updateStatus(events);
-
-    return events;
-  } catch (error) {
-    statusValue.textContent = "Status unavailable";
-    statusValue.classList.remove("on", "off");
-    statusDetail.textContent =
-      "Unable to load the calendar feed. Check your connection or the calendar URL.";
-    statusNext.textContent = "Next session: --";
-    statusUpdated.textContent = `Updated: ${formatDateTime(new Date())}`;
-
-    eventList.innerHTML = "";
-    const errorItem = document.createElement("li");
-    errorItem.className = "event-placeholder";
-    errorItem.textContent = "Calendar feed could not be loaded.";
-    eventList.appendChild(errorItem);
-
-    return [];
+    day.appendChild(header);
+    day.appendChild(dropzone);
+    calendar.appendChild(day);
   }
 };
 
-let cachedEvents = [];
-
-const refresh = async () => {
-  cachedEvents = await loadCalendar();
+const renderAll = () => {
+  updateWeekHeader();
+  updateGroupPanel();
+  renderCalendar();
 };
 
-const tick = () => {
-  if (cachedEvents.length) {
-    updateStatus(cachedEvents);
-  }
-};
+saveGroupsButton.addEventListener("click", () => {
+  groups = saveGroups();
+  renderAll();
+});
 
-refresh();
-setInterval(refresh, 15 * 60 * 1000);
-setInterval(tick, 60 * 1000);
+prevWeekButton.addEventListener("click", () => {
+  currentWeekStart = addDays(currentWeekStart, -7);
+  renderAll();
+});
+
+nextWeekButton.addEventListener("click", () => {
+  currentWeekStart = addDays(currentWeekStart, 7);
+  renderAll();
+});
+
+todayWeekButton.addEventListener("click", () => {
+  currentWeekStart = startOfWeek(new Date());
+  renderAll();
+});
+
+renderAll();

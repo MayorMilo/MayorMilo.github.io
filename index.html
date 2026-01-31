@@ -3,71 +3,80 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Interdorm Status</title>
+    <title>Dorm Duty Calendar</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="page">
       <header class="hero">
         <div>
-          <p class="eyebrow">Cate School • Dorm Life</p>
-          <h1>Interdorm Status</h1>
+          <p class="eyebrow">Dorm Life • Seniors</p>
+          <h1>Dorm Duty Calendar</h1>
           <p class="subtitle">
-            Live status based on the official school calendar. Check here for whether
-            interdorm visitation is currently on and how long until the next change.
+            Plan nightly duty (7:30–10:00 PM) by week. Drag a senior into a
+            day to claim a duty slot. Weeks run Sunday–Saturday and groups
+            rotate automatically to keep assignments fair.
           </p>
         </div>
-        <div class="status-card" id="status-card">
-          <p class="status-label">Current status</p>
-          <p class="status-value" id="status-value">Loading…</p>
-          <p class="status-detail" id="status-detail">Fetching calendar data.</p>
+        <div class="status-card">
+          <p class="status-label">Week of</p>
+          <p class="status-value" id="week-range">Loading…</p>
+          <p class="status-detail" id="week-detail">Calculating rotation.</p>
           <div class="status-meta">
-            <span id="status-next">Next update: --</span>
-            <span id="status-updated">Updated: --</span>
+            <span id="group-count">Groups loaded: --</span>
+            <span id="rotation-note">Rotation base: --</span>
           </div>
         </div>
       </header>
 
-      <section class="content">
-        <div class="panel">
-          <h2>Upcoming interdorm windows</h2>
-          <ul class="event-list" id="event-list">
-            <li class="event-placeholder">Loading upcoming events…</li>
-          </ul>
-        </div>
+      <section class="workspace">
+        <aside class="panel sidebar">
+          <h2>Seniors on Duty This Week</h2>
+          <p class="muted" id="group-label">Group --</p>
+          <div class="group-list" id="group-list">
+            <p class="muted">Add groups to start scheduling.</p>
+          </div>
 
-        <div class="panel">
-          <h2>Weekly schedule reference</h2>
-          <p class="muted">
-            Interdorm visitation schedule (subject to calendar changes):
-          </p>
-          <ul class="schedule">
-            <li>Tuesday–Thursday, N+, and “S” Fridays: 6:00–7:45 PM</li>
-            <li>N Fridays: 6:00–10:00 PM</li>
-            <li>Saturday: 4:00–6:00 PM and 8:00–10:00 PM</li>
-            <li>Sunday: 4:00–6:00 PM</li>
-          </ul>
-          <p class="muted note">
-            Actual sessions are pulled from the school calendar to respect special
-            schedules, campus events, and breaks.
-          </p>
-        </div>
-      </section>
+          <div class="divider"></div>
 
-      <section class="content">
-        <div class="panel">
-          <h2>Calendar source</h2>
+          <h3>Group roster (public text)</h3>
           <p class="muted">
-            This page reads the school calendar feed for events that include
-            “Interdorm” in the title. If the feed changes or includes additional
-            metadata, update the filter in <code>script.js</code>.
+            Edit groups in plain text (up to 5). Format:
+            <span class="mono">Group 1: Alex, Andrew, Ashwin</span>
           </p>
-          <code class="calendar-url" id="calendar-url"></code>
-        </div>
+          <textarea
+            id="group-input"
+            class="group-input"
+            rows="8"
+            spellcheck="false"
+          ></textarea>
+          <button class="button" id="save-groups">Save groups</button>
+          <p class="muted small" id="save-status" aria-live="polite"></p>
+        </aside>
+
+        <section class="panel calendar-panel">
+          <div class="calendar-header">
+            <div>
+              <h2>Weekly duty schedule</h2>
+              <p class="muted">Drag a name onto a night to assign duty.</p>
+            </div>
+            <div class="calendar-actions">
+              <button class="button ghost" id="prev-week">Previous week</button>
+              <button class="button ghost" id="today-week">This week</button>
+              <button class="button ghost" id="next-week">Next week</button>
+            </div>
+          </div>
+          <div class="calendar" id="calendar"></div>
+          <p class="muted small" id="drop-status" aria-live="polite"></p>
+        </section>
       </section>
     </main>
+
     <footer class="footer">
-      <p>Made for dorm life planning. Times shown in your local timezone.</p>
+      <p>
+        Duty windows are 7:30–10:00 PM Sunday–Friday. Saturdays have no duty
+        assignment. Drag names only once per night.
+      </p>
     </footer>
 
     <script src="script.js"></script>
