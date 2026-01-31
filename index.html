@@ -13,14 +13,14 @@
           <p class="eyebrow">Cate School • Dorm Life</p>
           <h1>Interdorm Status</h1>
           <p class="subtitle">
-            Live status based on the official school calendar. Check here for whether
+            Live status based on the West Coast weekly schedule. Check here for whether
             interdorm visitation is currently on and how long until the next change.
           </p>
         </div>
         <div class="status-card" id="status-card">
           <p class="status-label">Current status</p>
           <p class="status-value" id="status-value">Loading…</p>
-          <p class="status-detail" id="status-detail">Fetching calendar data.</p>
+          <p class="status-detail" id="status-detail">Calculating schedule status.</p>
           <div class="status-meta">
             <span id="status-next">Next update: --</span>
             <span id="status-updated">Updated: --</span>
@@ -29,13 +29,6 @@
       </header>
 
       <section class="content">
-        <div class="panel">
-          <h2>Upcoming interdorm windows</h2>
-          <ul class="event-list" id="event-list">
-            <li class="event-placeholder">Loading upcoming events…</li>
-          </ul>
-        </div>
-
         <div class="panel">
           <h2>Weekly schedule reference</h2>
           <p class="muted">
@@ -48,26 +41,24 @@
             <li>Sunday: 4:00–6:00 PM</li>
           </ul>
           <p class="muted note">
-            Actual sessions are pulled from the school calendar to respect special
-            schedules, campus events, and breaks.
+            This view uses the weekly schedule only. Special schedules and campus events
+            are not reflected.
           </p>
         </div>
-      </section>
 
-      <section class="content">
         <div class="panel">
-          <h2>Calendar source</h2>
-          <p class="muted">
-            This page reads the school calendar feed for events that include
-            “Interdorm” in the title. If the feed changes or includes additional
-            metadata, update the filter in <code>script.js</code>.
+          <h2>Next scheduled windows</h2>
+          <ul class="event-list" id="event-list">
+            <li class="event-placeholder">Loading upcoming times…</li>
+          </ul>
+          <p class="muted note">
+            Schedule is calculated from West Coast time (America/Los_Angeles).
           </p>
-          <code class="calendar-url" id="calendar-url"></code>
         </div>
       </section>
     </main>
     <footer class="footer">
-      <p>Made for dorm life planning. Times shown in your local timezone.</p>
+      <p>Made for dorm life planning. Times shown in Pacific Time.</p>
     </footer>
 
     <script src="script.js"></script>
