@@ -1,105 +1,14 @@
-const CALENDAR_URL =
-  "https://api.veracross.com/cate/subscribe/76B2E2E6-2C26-4656-A311-27910AAAAB2D.ics?uid=18A335ED-EFDF-4B52-95CD-EA80F989F34B";
-
 const statusValue = document.getElementById("status-value");
 const statusDetail = document.getElementById("status-detail");
 const statusNext = document.getElementById("status-next");
 const statusUpdated = document.getElementById("status-updated");
 const eventList = document.getElementById("event-list");
-const calendarUrl = document.getElementById("calendar-url");
 
-calendarUrl.textContent = CALENDAR_URL;
-
-const INTERDORM_REGEX = /interdorm/i;
-
-const unfoldLines = (text) =>
-  text
-    .replace(/\r\n/g, "\n")
-    .replace(/\n[ \t]/g, "");
-
-const parseDateValue = (value, tzid) => {
-  if (!value) {
-    return null;
-  }
-
-  if (/^\d{8}$/.test(value)) {
-    const year = Number(value.slice(0, 4));
-    const month = Number(value.slice(4, 6)) - 1;
-    const day = Number(value.slice(6, 8));
-    return new Date(year, month, day);
-  }
-
-  const trimmed = value.trim();
-  const isUtc = trimmed.endsWith("Z");
-  const datePart = trimmed.replace("Z", "");
-  const year = Number(datePart.slice(0, 4));
-  const month = Number(datePart.slice(4, 6)) - 1;
-  const day = Number(datePart.slice(6, 8));
-  const hour = Number(datePart.slice(9, 11));
-  const minute = Number(datePart.slice(11, 13));
-  const second = Number(datePart.slice(13, 15) || 0);
-
-  if (isUtc) {
-    return new Date(Date.UTC(year, month, day, hour, minute, second));
-  }
-
-  if (tzid && tzid !== "local") {
-    const localeTime = new Date(year, month, day, hour, minute, second);
-    return localeTime;
-  }
-
-  return new Date(year, month, day, hour, minute, second);
-};
-
-const parseIcs = (icsText) => {
-  const events = [];
-  const lines = unfoldLines(icsText).split("\n");
-  let currentEvent = null;
-
-  for (const line of lines) {
-    if (line.startsWith("BEGIN:VEVENT")) {
-      currentEvent = {};
-      continue;
-    }
-
-    if (line.startsWith("END:VEVENT")) {
-      if (currentEvent) {
-        events.push(currentEvent);
-      }
-      currentEvent = null;
-      continue;
-    }
-
-    if (!currentEvent) {
-      continue;
-    }
-
-    const [propertySection, value] = line.split(":", 2);
-    if (!value) {
-      continue;
-    }
-
-    const [propertyName, ...params] = propertySection.split(";");
-    const upperName = propertyName.toUpperCase();
-    const paramMap = params.reduce((acc, param) => {
-      const [key, paramValue] = param.split("=");
-      if (key && paramValue) {
-        acc[key.toLowerCase()] = paramValue;
-      }
-      return acc;
-    }, {});
-
-    currentEvent[upperName] = {
-      value: value.trim(),
-      params: paramMap,
-    };
-  }
-
-  return events;
-};
+const PACIFIC_TZ = "America/Los_Angeles";
 
 const formatDateTime = (date) =>
-  new Intl.DateTimeFormat(undefined, {
+  new Intl.DateTimeFormat("en-US", {
+    timeZone: PACIFIC_TZ,
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -133,51 +42,158 @@ const formatDuration = (ms) => {
   return parts.join(", ");
 };
 
-const normalizeEvents = (rawEvents) =>
-  rawEvents
-    .map((event) => {
-      const summary = event.SUMMARY?.value || "";
-      const startRaw = event.DTSTART;
-      const endRaw = event.DTEND;
+const getPacificParts = (date) => {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: PACIFIC_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    weekday: "short",
+  });
 
-      if (!startRaw || !endRaw) {
-        return null;
+  return formatter.formatToParts(date).reduce((acc, part) => {
+    if (part.type !== "literal") {
+      acc[part.type] = part.value;
+    }
+    return acc;
+  }, {});
+};
+
+const getTimeZoneOffset = (date, timeZone) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+    .formatToParts(date)
+    .reduce((acc, part) => {
+      if (part.type !== "literal") {
+        acc[part.type] = part.value;
       }
+      return acc;
+    }, {});
 
-      const start = parseDateValue(startRaw.value, startRaw.params?.tzid);
-      const end = parseDateValue(endRaw.value, endRaw.params?.tzid);
+  const utcTime = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second)
+  );
 
-      return {
-        summary,
-        start,
-        end,
-      };
-    })
-    .filter((event) => event && event.start && event.end)
-    .sort((a, b) => a.start - b.start);
+  return utcTime - date.getTime();
+};
 
-const renderEvents = (events) => {
+const toPacificDate = (year, month, day, hour, minute) => {
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
+  const guessDate = new Date(utcGuess);
+  let offset = getTimeZoneOffset(guessDate, PACIFIC_TZ);
+  let adjusted = new Date(utcGuess - offset);
+  const adjustedOffset = getTimeZoneOffset(adjusted, PACIFIC_TZ);
+
+  if (adjustedOffset !== offset) {
+    offset = adjustedOffset;
+    adjusted = new Date(utcGuess - offset);
+  }
+
+  return adjusted;
+};
+
+const scheduleForDay = (weekday) => {
+  switch (weekday) {
+    case "Tue":
+    case "Wed":
+    case "Thu":
+      return [
+        { start: { hour: 18, minute: 0 }, end: { hour: 19, minute: 45 } },
+      ];
+    case "Fri":
+      return [
+        { start: { hour: 18, minute: 0 }, end: { hour: 19, minute: 45 } },
+        { start: { hour: 19, minute: 45 }, end: { hour: 22, minute: 0 } },
+      ];
+    case "Sat":
+      return [
+        { start: { hour: 16, minute: 0 }, end: { hour: 18, minute: 0 } },
+        { start: { hour: 20, minute: 0 }, end: { hour: 22, minute: 0 } },
+      ];
+    case "Sun":
+      return [
+        { start: { hour: 16, minute: 0 }, end: { hour: 18, minute: 0 } },
+      ];
+    default:
+      return [];
+  }
+};
+
+const buildUpcomingWindows = (now, count = 6) => {
+  const windows = [];
+  const startDate = new Date(now);
+
+  for (let offset = 0; windows.length < count && offset < 21; offset += 1) {
+    const date = new Date(startDate);
+    date.setDate(startDate.getDate() + offset);
+    const parts = getPacificParts(date);
+    const sessions = scheduleForDay(parts.weekday);
+
+    sessions.forEach((session) => {
+      const start = toPacificDate(
+        Number(parts.year),
+        Number(parts.month),
+        Number(parts.day),
+        session.start.hour,
+        session.start.minute
+      );
+      const end = toPacificDate(
+        Number(parts.year),
+        Number(parts.month),
+        Number(parts.day),
+        session.end.hour,
+        session.end.minute
+      );
+
+      if (end > now) {
+        windows.push({ start, end });
+      }
+    });
+  }
+
+  return windows.sort((a, b) => a.start - b.start).slice(0, count);
+};
+
+const renderUpcoming = (windows) => {
   eventList.innerHTML = "";
-  if (!events.length) {
+
+  if (!windows.length) {
     const empty = document.createElement("li");
     empty.className = "event-placeholder";
-    empty.textContent = "No interdorm events found in the calendar.";
+    empty.textContent = "No upcoming interdorm windows found.";
     eventList.appendChild(empty);
     return;
   }
 
-  events.slice(0, 6).forEach((event) => {
+  windows.forEach((window) => {
     const item = document.createElement("li");
     item.className = "event-item";
 
     const title = document.createElement("div");
     title.className = "event-title";
-    title.textContent = event.summary;
+    title.textContent = "Interdorm window";
 
     const time = document.createElement("div");
     time.className = "event-time";
-    time.textContent = `${formatDateTime(event.start)} – ${formatDateTime(
-      event.end
+    time.textContent = `${formatDateTime(window.start)} – ${formatDateTime(
+      window.end
     )}`;
 
     item.appendChild(title);
@@ -186,10 +202,13 @@ const renderEvents = (events) => {
   });
 };
 
-const updateStatus = (events) => {
+const updateStatus = () => {
   const now = new Date();
-  const current = events.find((event) => now >= event.start && now <= event.end);
-  const upcoming = events.find((event) => event.start > now);
+  const windows = buildUpcomingWindows(now, 6);
+  const current = windows.find(
+    (window) => now >= window.start && now <= window.end
+  );
+  const next = windows.find((window) => window.start > now);
 
   if (current) {
     const remaining = current.end - now;
@@ -203,10 +222,10 @@ const updateStatus = (events) => {
     statusValue.classList.add("off");
     statusValue.classList.remove("on");
 
-    if (upcoming) {
-      const until = upcoming.start - now;
+    if (next) {
+      const until = next.start - now;
       statusDetail.textContent = `Next session starts in ${formatDuration(until)}.`;
-      statusNext.textContent = `Starts: ${formatDateTime(upcoming.start)}`;
+      statusNext.textContent = `Starts: ${formatDateTime(next.start)}`;
     } else {
       statusDetail.textContent = "No upcoming interdorm sessions are scheduled.";
       statusNext.textContent = "Next session: --";
@@ -214,56 +233,8 @@ const updateStatus = (events) => {
   }
 
   statusUpdated.textContent = `Updated: ${formatDateTime(now)}`;
+  renderUpcoming(windows);
 };
 
-const loadCalendar = async () => {
-  statusDetail.textContent = "Loading calendar data…";
-
-  try {
-    const response = await fetch(CALENDAR_URL);
-    if (!response.ok) {
-      throw new Error(`Calendar fetch failed: ${response.status}`);
-    }
-    const icsText = await response.text();
-    const rawEvents = parseIcs(icsText);
-    const events = normalizeEvents(rawEvents).filter((event) =>
-      INTERDORM_REGEX.test(event.summary)
-    );
-
-    renderEvents(events);
-    updateStatus(events);
-
-    return events;
-  } catch (error) {
-    statusValue.textContent = "Status unavailable";
-    statusValue.classList.remove("on", "off");
-    statusDetail.textContent =
-      "Unable to load the calendar feed. Check your connection or the calendar URL.";
-    statusNext.textContent = "Next session: --";
-    statusUpdated.textContent = `Updated: ${formatDateTime(new Date())}`;
-
-    eventList.innerHTML = "";
-    const errorItem = document.createElement("li");
-    errorItem.className = "event-placeholder";
-    errorItem.textContent = "Calendar feed could not be loaded.";
-    eventList.appendChild(errorItem);
-
-    return [];
-  }
-};
-
-let cachedEvents = [];
-
-const refresh = async () => {
-  cachedEvents = await loadCalendar();
-};
-
-const tick = () => {
-  if (cachedEvents.length) {
-    updateStatus(cachedEvents);
-  }
-};
-
-refresh();
-setInterval(refresh, 15 * 60 * 1000);
-setInterval(tick, 60 * 1000);
+updateStatus();
+setInterval(updateStatus, 60 * 1000);
