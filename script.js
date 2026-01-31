@@ -1,7 +1,5 @@
-const LOCAL_CALENDAR_URL = "7FECE5F2-924D-4559-AF11-8BF7F2E80EBD (2).ics";
-const REMOTE_CALENDAR_URL =
+const CALENDAR_URL =
   "https://api.veracross.com/cate/subscribe/76B2E2E6-2C26-4656-A311-27910AAAAB2D.ics?uid=18A335ED-EFDF-4B52-95CD-EA80F989F34B";
-const CORS_PROXY_URL = "https://api.allorigins.win/raw?url=";
 
 const statusValue = document.getElementById("status-value");
 const statusDetail = document.getElementById("status-detail");
@@ -10,7 +8,7 @@ const statusUpdated = document.getElementById("status-updated");
 const eventList = document.getElementById("event-list");
 const calendarUrl = document.getElementById("calendar-url");
 
-calendarUrl.textContent = LOCAL_CALENDAR_URL;
+calendarUrl.textContent = CALENDAR_URL;
 
 const INTERDORM_REGEX = /interdorm/i;
 
@@ -218,31 +216,15 @@ const updateStatus = (events) => {
   statusUpdated.textContent = `Updated: ${formatDateTime(now)}`;
 };
 
-const fetchCalendarText = async () => {
-  const localResponse = await fetch(encodeURI(LOCAL_CALENDAR_URL));
-  if (localResponse.ok) {
-    return localResponse.text();
-  }
-
-  const response = await fetch(REMOTE_CALENDAR_URL);
-  if (response.ok) {
-    return response.text();
-  }
-
-  const proxiedResponse = await fetch(
-    `${CORS_PROXY_URL}${encodeURIComponent(REMOTE_CALENDAR_URL)}`
-  );
-  if (!proxiedResponse.ok) {
-    throw new Error(`Calendar fetch failed: ${proxiedResponse.status}`);
-  }
-  return proxiedResponse.text();
-};
-
 const loadCalendar = async () => {
   statusDetail.textContent = "Loading calendar data…";
 
   try {
-    const icsText = await fetchCalendarText();
+    const response = await fetch(CALENDAR_URL);
+    if (!response.ok) {
+      throw new Error(`Calendar fetch failed: ${response.status}`);
+    }
+    const icsText = await response.text();
     const rawEvents = parseIcs(icsText);
     const events = normalizeEvents(rawEvents).filter((event) =>
       INTERDORM_REGEX.test(event.summary)
